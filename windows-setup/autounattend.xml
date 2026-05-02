@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Windows 10/11 Unattended Deployment Configuration
-  Applies system hardening, privacy settings, and performance optimizations.
-  Compatible with Windows 10/11 Pro, Home, LTSC, and Server 2019-2025.
+Windows 10/11 Unattended Deployment Configuration
+Applies system hardening, privacy settings, and performance optimizations.
+Compatible with Windows 10/11 Pro, Home, LTSC, and Server 2019-2025.
 -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
 	<settings pass="offlineServicing">
@@ -32,7 +32,6 @@
 				<RunSynchronousCommand wcm:action="add"><Order>4</Order><Path>reg.exe add "HKLM\SYSTEM\Setup\LabConfig" /v BypassStorageCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
 				<RunSynchronousCommand wcm:action="add"><Order>5</Order><Path>reg.exe add "HKLM\SYSTEM\Setup\LabConfig" /v BypassCPUCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
 				<RunSynchronousCommand wcm:action="add"><Order>6</Order><Path>reg.exe add "HKLM\SYSTEM\CurrentControlSet\Control\BitLocker" /v "PreventDeviceEncryption" /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>7</Order><Path>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\GetComputerName.ps1"</Path></RunSynchronousCommand>
 			</RunSynchronous>
 		</component>
 	</settings>
@@ -44,12 +43,41 @@
 		</component>
 		<component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
 			<RunSynchronous>
-				<RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\ApplyComputerName.ps1"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$xml=[xml]::new();$xml.Load('C:\Windows\Panther\autounattend.xml');$sb=[scriptblock]::Create($xml.unattend.Extensions.ExtractScript);Invoke-Command -ScriptBlock $sb -ArgumentList $xml"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>3</Order><Path>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\Specialize.ps1"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>4</Order><Path>reg.exe load "HKU\DefaultUser" "C:\Users\Default\NTUSER.DAT"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>5</Order><Path>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\DefaultUser.ps1"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>6</Order><Path>reg.exe unload "HKU\DefaultUser"</Path></RunSynchronousCommand>
+				<!-- 1. EXTRACT SCRIPTS FIRST (Critical Fix) -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>1</Order>
+					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "$xml=[xml]::new();$xml.Load('C:\Windows\Panther\autounattend.xml');$sb=[scriptblock]::Create($xml.unattend.Extensions.ExtractScript);Invoke-Command -ScriptBlock $sb -ArgumentList $xml"</Path>
+				</RunSynchronousCommand>
+				<!-- 2. GENERATE COMPUTER NAME (Runs in full OS environment now) -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>2</Order>
+					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\GetComputerName.ps1"</Path>
+				</RunSynchronousCommand>
+				<!-- 3. APPLY COMPUTER NAME -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>3</Order>
+					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\ApplyComputerName.ps1"</Path>
+				</RunSynchronousCommand>
+				<!-- 4. RUN SPECIALIZE HARDENING -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>4</Order>
+					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\Specialize.ps1"</Path>
+				</RunSynchronousCommand>
+				<!-- 5. LOAD DEFAULT USER HIVE -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>5</Order>
+					<Path>reg.exe load "HKU\DefaultUser" "C:\Users\Default\NTUSER.DAT"</Path>
+				</RunSynchronousCommand>
+				<!-- 6. APPLY DEFAULT USER SETTINGS -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>6</Order>
+					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\DefaultUser.ps1"</Path>
+				</RunSynchronousCommand>
+				<!-- 7. UNLOAD DEFAULT USER HIVE -->
+				<RunSynchronousCommand wcm:action="add">
+					<Order>7</Order>
+					<Path>reg.exe unload "HKU\DefaultUser"</Path>
+				</RunSynchronousCommand>
 			</RunSynchronous>
 		</component>
 	</settings>
@@ -76,7 +104,7 @@
 			<FirstLogonCommands>
 				<SynchronousCommand wcm:action="add">
 					<Order>1</Order>
-					<CommandLine>powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\FirstLogon.ps1"</CommandLine>
+					<CommandLine>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\FirstLogon.ps1"</CommandLine>
 					<RequiresUserInput>false</RequiresUserInput>
 				</SynchronousCommand>
 			</FirstLogonCommands>
@@ -107,8 +135,15 @@ $ErrorActionPreference = 'Stop'
 $outputFile = 'C:\Windows\Setup\Scripts\ComputerName.txt'
 if (-not (Test-Path (Split-Path $outputFile))) { New-Item (Split-Path $outputFile) -ItemType Directory -Force | Out-Null }
 
-$cpu = Get-CimInstance Win32_Processor -Property Manufacturer -ErrorAction SilentlyContinue | Select-Object -First 1
-$mfr = if ($cpu -and $cpu.Manufacturer) { $cpu.Manufacturer.Trim() } else { 'Unknown' }
+# Reliable CPU detection in full OS environment
+try {
+    $cpu = Get-CimInstance Win32_Processor -Property Manufacturer -ErrorAction Stop | Select-Object -First 1
+    $mfr = $cpu.Manufacturer.Trim()
+} catch {
+    # Fallback to registry if CIM fails
+    $mfr = (Get-ItemProperty 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0' -Name 'ProcessorNameString' -EA SilentlyContinue).'ProcessorNameString'
+    if ($mfr -match 'AMD') { $mfr = 'AMD' } elseif ($mfr -match 'Intel') { $mfr = 'Intel' } else { $mfr = 'Unknown' }
+}
 
 $cpuLetter = switch -Regex ($mfr) {
     'Intel' { @('N','P','C') | Get-Random }
@@ -152,8 +187,6 @@ try {
 # Applies system-wide registry configurations, telemetry restrictions, and removes default applications.
 $ErrorActionPreference = 'Continue'
 $logFile = 'C:\Windows\Setup\Scripts\Specialize.log'
-Start-Transcript -Path "$env:TEMP\Specialize_Transcript.log" -Append -Force | Out-Null
-
 $os = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
 $isServer = $os.Caption -like '*Server*'
 $isLTSC = $os.Caption -like '*LTSC*'
@@ -171,7 +204,6 @@ function Set-RegSafe {
     }
 }
 
-# Core privacy and system configuration
 Set-RegSafe 'HKLM:\SYSTEM\Setup\MoSetup' 'AllowUpgradesWithUnsupportedTPMOrCPU' 1
 Set-RegSafe 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Communications' 'ConfigureChatAutoInstall' 0
 Set-RegSafe 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot' 'TurnOffWindowsCopilot' 1
@@ -192,10 +224,8 @@ Set-RegSafe 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\Syste
 Set-RegSafe 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' 'NetworkThrottlingIndex' 0xFFFFFFFF
 Set-RegSafe 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet' 'SubmitSamplesConsent' 2
 
-# Network optimization
 netsh.exe int tcp set global autotuning=normal 2>&1 | Out-Null
 
-# Application removal (skipped on Server)
 if (-not $isServer) {
     $pkgs = @('Microsoft.BingSearch*','Clipchamp.Clipchamp*','Microsoft.549981C3F5F10*',
               'Microsoft.Windows.DevHome*','MicrosoftCorporationII.MicrosoftFamily*',
@@ -207,7 +237,6 @@ if (-not $isServer) {
               'Microsoft.XboxGameOverlay*','Microsoft.XboxGamingOverlay*','Microsoft.XboxIdentityProvider*',
               'Microsoft.XboxSpeechToTextOverlay*','Microsoft.GamingApp*','Microsoft.YourPhone*')
     if ($build -ge 22000 -and -not $isLTSC) { $pkgs += 'Microsoft.Windows.Ai.Copilot.Provider*' }
-    
     foreach ($p in $pkgs) {
         try {
             $found = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $p }
@@ -218,14 +247,11 @@ if (-not $isServer) {
         Remove-Item "HKLM:\Software\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\$_" -Recurse -Force -EA SilentlyContinue
     }
 }
-Stop-Transcript | Out-Null
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\DefaultUser.ps1">
 # Configures default user profile registry hive for new account inheritance.
 $ErrorActionPreference = 'Continue'
-Start-Transcript -Path "$env:TEMP\DefaultUser_Transcript.log" -Append -Force | Out-Null
-
 function Set-RegSafe {
     param([string]$Path, [string]$Name, $Value, [string]$Type = 'DWord')
     try {
@@ -237,7 +263,6 @@ function Set-RegSafe {
         reg.exe add "`"$Path`"" /v "`"$Name`"" /t $regType /d $val /f 2>&1 | Out-Null
     }
 }
-
 $p = 'HKU:\DefaultUser'
 Set-RegSafe "$p\Software\Policies\Microsoft\Windows\WindowsCopilot" 'TurnOffWindowsCopilot' 1
 Remove-ItemProperty "$p\Software\Microsoft\Windows\CurrentVersion\Run" 'OneDriveSetup' -Force -EA SilentlyContinue
@@ -268,16 +293,12 @@ Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIc
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" '{20d04fe0-3aea-1069-a2d8-08002b30309d}' 0
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" '{645ff040-5081-101b-9f08-00aa002f954e}' 0
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" '{20d04fe0-3aea-1069-a2d8-08002b30309d}' 0
-Stop-Transcript | Out-Null
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\UserOnce.ps1">
 # Applies per-user registry configurations and refreshes shell on first logon.
 $ErrorActionPreference = 'Continue'
-Start-Transcript -Path "$env:TEMP\UserOnce_Transcript.log" -Append -Force | Out-Null
-
 Get-AppxPackage -Name 'Microsoft.Windows.Ai.Copilot.Provider' -EA SilentlyContinue | Remove-AppxPackage -EA SilentlyContinue
-
 function Set-RegSafe {
     param([string]$Path, [string]$Name, $Value, [string]$Type = 'DWord')
     try {
@@ -285,7 +306,6 @@ function Set-RegSafe {
         Set-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -Type $Type -Force -EA Stop
     } catch {}
 }
-
 Set-RegSafe 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' 'TurnOffWindowsCopilot' 1
 Set-RegSafe 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'Hidden' 1
 Set-RegSafe 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'HideFileExt' 0
@@ -304,20 +324,14 @@ Set-RegSafe 'HKCU:\System\GameConfigStore' 'GameDVR_Enabled' 0
 Set-RegSafe 'HKCU:\Control Panel\Accessibility\StickyKeys' 'Flags' '506' 'String'
 Set-RegSafe 'HKCU:\Control Panel\Accessibility\ToggleKeys' 'Flags' '58' 'String'
 Set-RegSafe 'HKCU:\Control Panel\Accessibility\FilterKeys' 'Flags' '122' 'String'
-
-# Refresh shell safely without terminating explorer.exe
-try { $shell = New-Object -ComObject Shell.Application; $shell.RefreshMenu() } catch {}
-Stop-Transcript | Out-Null
+try { (New-Object -ComObject Shell.Application).RefreshMenu() } catch {}
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\FirstLogon.ps1">
 # Finalizes power configuration, optimizes background services, and deploys verification utility.
 $ErrorActionPreference = 'Continue'
-Start-Transcript -Path "$env:TEMP\FirstLogon_Transcript.log" -Append -Force | Out-Null
-
 $os = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
 $isServer = $os.Caption -like '*Server*'
-
 powercfg.exe /hibernate off 2>&1 | Out-Null
 $hp = powercfg /l | Select-String 'High performance'
 if ($hp) { powercfg.exe /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>&1 | Out-Null }
@@ -325,7 +339,6 @@ powercfg.exe /change standby-timeout-ac 0 2>&1 | Out-Null
 powercfg.exe /change standby-timeout-dc 0 2>&1 | Out-Null
 powercfg.exe /change monitor-timeout-ac 0 2>&1 | Out-Null
 
-# Conditional SysMain management based on storage type
 function Test-IsSSD {
     $pd = Get-PhysicalDisk -EA SilentlyContinue | Where-Object { $_.BusType -ne 'USB' } | Sort-Object Size -Descending | Select-Object -First 1
     if ($pd.MediaType -eq 'SSD' -or $pd.BusType -eq 'NVMe') { return $true }
@@ -337,7 +350,6 @@ if ((Test-IsSSD) -or $isServer) {
     try { Stop-Service SysMain -Force -EA SilentlyContinue; Set-Service SysMain -StartupType Disabled -EA SilentlyContinue } catch {}
 }
 
-# Deploy desktop verification utility
 $desktop = [Environment]::GetFolderPath('Desktop')
 $src = 'C:\Windows\Setup\Scripts\DeploymentVerification.ps1'
 $dest = Join-Path $desktop 'VerifyDeployment.lnk'
@@ -353,20 +365,15 @@ if (Test-Path $src) {
         $sc.Save()
     } catch {}
 }
-Stop-Transcript | Out-Null
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\DeploymentVerification.ps1">
 # Verifies applied configuration settings and outputs a structured report.
-# Requires Administrator privileges to read HKLM keys accurately.
 #requires -RunAsAdministrator
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
-
 $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
-$isServer = $os.Caption -like '*Server*'
 $report = [System.Collections.ArrayList]::new()
-
 function Test-RegValue {
     param([string]$Path, [string]$Name, $Expected)
     try {
@@ -378,11 +385,9 @@ function Test-RegValue {
         return 'MISSING'
     } catch { return 'ERROR' }
 }
-
 $report.Add("Configuration Verification Report | $(Get-Date -f 'yyyy-MM-dd HH:mm:ss')") | Out-Null
 $report.Add("OS: $($os.Caption) | Build: $([Environment]::OSVersion.Version.Build) | User: $env:USERNAME") | Out-Null
 $report.Add('') | Out-Null
-
 $checks = @(
     @{ Cat='HKLM'; Check='Allow Upgrades on Unsupported Hardware'; Path='HKLM:\SYSTEM\Setup\MoSetup'; Name='AllowUpgradesWithUnsupportedTPMOrCPU'; Exp=1 },
     @{ Cat='HKLM'; Check='Disable Copilot'; Path='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot'; Name='TurnOffWindowsCopilot'; Exp=1 },
@@ -401,7 +406,6 @@ $checks = @(
     @{ Cat='System'; Check='Hibernation Disabled'; Exp='Disabled' },
     @{ Cat='Network'; Check='TCP Auto-Tuning Normal'; Exp='normal' }
 )
-
 $pass = 0; $fail = 0
 foreach ($c in $checks) {
     $status = switch ($c.Cat) {
@@ -413,13 +417,10 @@ foreach ($c in $checks) {
     if ($status -eq 'PASS') { $pass++ } else { $fail++ }
     $report.Add("[$($c.Cat)] $($c.Check) : $status") | Out-Null
 }
-
 $report.Add('') | Out-Null
 $report.Add("Summary: $pass Passed | $fail Failed") | Out-Null
 $report.Add('') | Out-Null
 $report | Out-File "$env:USERPROFILE\Desktop\VerificationResult.txt" -Force -Encoding utf8
-
-# Display result
 Add-Type -AssemblyName System.Windows.Forms
 $msg = "Deployment Verification Complete`n`nPassed: $pass`nFailed: $fail`n`nFull report saved to Desktop\VerificationResult.txt"
 [System.Windows.Forms.MessageBox]::Show($msg, 'Configuration Check', 'OK', 'Information') | Out-Null
