@@ -43,41 +43,13 @@ Compatible with Windows 10/11 Pro, Home, LTSC, and Server 2019-2025.
 		</component>
 		<component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
 			<RunSynchronous>
-				<!-- 1. EXTRACT SCRIPTS FIRST (Critical Fix) -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>1</Order>
-					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "$xml=[xml]::new();$xml.Load('C:\Windows\Panther\autounattend.xml');$sb=[scriptblock]::Create($xml.unattend.Extensions.ExtractScript);Invoke-Command -ScriptBlock $sb -ArgumentList $xml"</Path>
-				</RunSynchronousCommand>
-				<!-- 2. GENERATE COMPUTER NAME (Runs in full OS environment now) -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>2</Order>
-					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\GetComputerName.ps1"</Path>
-				</RunSynchronousCommand>
-				<!-- 3. APPLY COMPUTER NAME -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>3</Order>
-					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\ApplyComputerName.ps1"</Path>
-				</RunSynchronousCommand>
-				<!-- 4. RUN SPECIALIZE HARDENING -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>4</Order>
-					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\Specialize.ps1"</Path>
-				</RunSynchronousCommand>
-				<!-- 5. LOAD DEFAULT USER HIVE -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>5</Order>
-					<Path>reg.exe load "HKU\DefaultUser" "C:\Users\Default\NTUSER.DAT"</Path>
-				</RunSynchronousCommand>
-				<!-- 6. APPLY DEFAULT USER SETTINGS -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>6</Order>
-					<Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\DefaultUser.ps1"</Path>
-				</RunSynchronousCommand>
-				<!-- 7. UNLOAD DEFAULT USER HIVE -->
-				<RunSynchronousCommand wcm:action="add">
-					<Order>7</Order>
-					<Path>reg.exe unload "HKU\DefaultUser"</Path>
-				</RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "$xml=[xml]::new();$xml.Load('C:\Windows\Panther\autounattend.xml');$sb=[scriptblock]::Create($xml.unattend.Extensions.ExtractScript);Invoke-Command -ScriptBlock $sb -ArgumentList $xml"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\GetComputerName.ps1"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>3</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\ApplyComputerName.ps1"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>4</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\Specialize.ps1"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>5</Order><Path>reg.exe load "HKU\DefaultUser" "C:\Users\Default\NTUSER.DAT"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>6</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\DefaultUser.ps1"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>7</Order><Path>reg.exe unload "HKU\DefaultUser"</Path></RunSynchronousCommand>
 			</RunSynchronous>
 		</component>
 	</settings>
@@ -121,53 +93,42 @@ foreach ($file in $Document.unattend.Extensions.File) {
     try {
         $bytes = [System.Text.Encoding]::UTF8.GetPreamble() + [System.Text.Encoding]::UTF8.GetBytes($file.InnerText.Trim())
         [System.IO.File]::WriteAllBytes($path, $bytes)
-    } catch { Write-Error "EXTRACT FAIL: $path | $_"; exit 1 }
+    } catch { exit 1 }
 }
 $required = @('GetComputerName.ps1','ApplyComputerName.ps1','Specialize.ps1','DefaultUser.ps1','FirstLogon.ps1','UserOnce.ps1','DeploymentVerification.ps1')
 $missing = $required | Where-Object { -not (Test-Path "$base\$_") }
-if ($missing.Count -gt 0) { Write-Error "MISSING SCRIPTS: $($missing -join ', ')"; exit 1 }
+if ($missing.Count -gt 0) { exit 1 }
 		</ExtractScript>
 
 		<File path="C:\Windows\Setup\Scripts\GetComputerName.ps1">
-# Generates computer name based on processor manufacturer.
-# Intel uses N, P, C. AMD uses A, M, D. Other architectures use V.
 $ErrorActionPreference = 'Stop'
 $outputFile = 'C:\Windows\Setup\Scripts\ComputerName.txt'
 if (-not (Test-Path (Split-Path $outputFile))) { New-Item (Split-Path $outputFile) -ItemType Directory -Force | Out-Null }
-
-# Reliable CPU detection in full OS environment
 try {
     $cpu = Get-CimInstance Win32_Processor -Property Manufacturer -ErrorAction Stop | Select-Object -First 1
     $mfr = $cpu.Manufacturer.Trim()
 } catch {
-    # Fallback to registry if CIM fails
     $mfr = (Get-ItemProperty 'HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0' -Name 'ProcessorNameString' -EA SilentlyContinue).'ProcessorNameString'
     if ($mfr -match 'AMD') { $mfr = 'AMD' } elseif ($mfr -match 'Intel') { $mfr = 'Intel' } else { $mfr = 'Unknown' }
 }
-
 $cpuLetter = switch -Regex ($mfr) {
     'Intel' { @('N','P','C') | Get-Random }
     'AMD'   { @('A','M','D') | Get-Random }
     default { 'V' }
 }
-
 $num1  = Get-Random -Minimum 55 -Maximum 100
 $char2 = [char](78 + (Get-Random -Maximum 13))
 $num2  = Get-Random -Minimum 100 -Maximum 999
-
 $newName = "DEVICE-$cpuLetter$num1$char2$num2"
 if ($newName.Length -gt 15) { $newName = $newName.Substring(0, 15) }
-
 $newName | Out-File -LiteralPath $outputFile -Encoding utf8 -Force
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\ApplyComputerName.ps1">
-# Applies generated computer name using official Windows API with registry fallback.
 $ErrorActionPreference = 'Stop'
 $nameFile = 'C:\Windows\Setup\Scripts\ComputerName.txt'
 if (-not (Test-Path $nameFile)) { exit 1 }
 $newName = (Get-Content $nameFile).Trim()
-
 try {
     Rename-Computer -NewName $newName -Force -ErrorAction Stop
 } catch {
@@ -184,9 +145,10 @@ try {
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\Specialize.ps1">
-# Applies system-wide registry configurations, telemetry restrictions, and removes default applications.
 $ErrorActionPreference = 'Continue'
-$logFile = 'C:\Windows\Setup\Scripts\Specialize.log'
+$log = 'C:\Windows\Setup\Scripts\Specialize.log'
+function Log($m) { "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') $m" | Add-Content $log -Force -EA SilentlyContinue }
+Log "=== Specialize Start ==="
 $os = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
 $isServer = $os.Caption -like '*Server*'
 $isLTSC = $os.Caption -like '*LTSC*'
@@ -197,10 +159,12 @@ function Set-RegSafe {
     try {
         if (-not (Test-Path $Path)) { New-Item -Path (Split-Path $Path) -Force -EA SilentlyContinue | Out-Null }
         Set-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -Type $Type -Force -EA Stop
+        Log "Set: $Path\$Name = $Value"
     } catch {
         $regType = switch ($Type) { 'DWord'{'REG_DWORD'} 'String'{'REG_SZ'} default{'REG_DWORD'} }
         $val = if ($Type -eq 'String') { "`"$Value`"" } else { $Value }
         reg.exe add "`"$Path`"" /v "`"$Name`"" /t $regType /d $val /f 2>&1 | Out-Null
+        Log "Fallback reg.exe: $Path\$Name"
     }
 }
 
@@ -223,35 +187,27 @@ Set-RegSafe 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense' 'AllowStora
 Set-RegSafe 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' 'SystemResponsiveness' 0
 Set-RegSafe 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' 'NetworkThrottlingIndex' 0xFFFFFFFF
 Set-RegSafe 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet' 'SubmitSamplesConsent' 2
-
 netsh.exe int tcp set global autotuning=normal 2>&1 | Out-Null
 
 if (-not $isServer) {
-    $pkgs = @('Microsoft.BingSearch*','Clipchamp.Clipchamp*','Microsoft.549981C3F5F10*',
-              'Microsoft.Windows.DevHome*','MicrosoftCorporationII.MicrosoftFamily*',
-              'Microsoft.WindowsFeedbackHub*','Microsoft.Getstarted*','Microsoft.MixedReality.Portal*',
-              'Microsoft.MicrosoftOfficeHub*','Microsoft.Office.OneNote*','Microsoft.OutlookForWindows*',
-              'Microsoft.MSPaint*','Microsoft.PowerAutomateDesktop*','MicrosoftCorporationII.QuickAssist*',
-              'Microsoft.SkypeApp*','Microsoft.MicrosoftSolitaireCollection*','MicrosoftTeams*','MSTeams*',
-              'Microsoft.Todos*','Microsoft.Wallet*','Microsoft.Xbox.TCUI*','Microsoft.XboxApp*',
-              'Microsoft.XboxGameOverlay*','Microsoft.XboxGamingOverlay*','Microsoft.XboxIdentityProvider*',
-              'Microsoft.XboxSpeechToTextOverlay*','Microsoft.GamingApp*','Microsoft.YourPhone*')
+    $pkgs = @('Microsoft.BingSearch*','Clipchamp.Clipchamp*','Microsoft.549981C3F5F10*','Microsoft.Windows.DevHome*','MicrosoftCorporationII.MicrosoftFamily*','Microsoft.WindowsFeedbackHub*','Microsoft.Getstarted*','Microsoft.MixedReality.Portal*','Microsoft.MicrosoftOfficeHub*','Microsoft.Office.OneNote*','Microsoft.OutlookForWindows*','Microsoft.MSPaint*','Microsoft.PowerAutomateDesktop*','MicrosoftCorporationII.QuickAssist*','Microsoft.SkypeApp*','Microsoft.MicrosoftSolitaireCollection*','MicrosoftTeams*','MSTeams*','Microsoft.Todos*','Microsoft.Wallet*','Microsoft.Xbox.TCUI*','Microsoft.XboxApp*','Microsoft.XboxGameOverlay*','Microsoft.XboxGamingOverlay*','Microsoft.XboxIdentityProvider*','Microsoft.XboxSpeechToTextOverlay*','Microsoft.GamingApp*','Microsoft.YourPhone*')
     if ($build -ge 22000 -and -not $isLTSC) { $pkgs += 'Microsoft.Windows.Ai.Copilot.Provider*' }
     foreach ($p in $pkgs) {
         try {
             $found = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $p }
-            if ($found) { Start-Sleep -Milliseconds 1500; $found | Remove-AppxProvisionedPackage -AllUsers -Online -EA SilentlyContinue | Out-Null }
-        } catch {}
+            if ($found) { Start-Sleep -Milliseconds 1500; $found | Remove-AppxProvisionedPackage -AllUsers -Online -EA SilentlyContinue | Out-Null; Log "Removed: $($found.DisplayName)" }
+        } catch { Log "Skip pkg: $p" }
     }
-    @('DevHomeUpdate','OutlookUpdate') | ForEach-Object {
-        Remove-Item "HKLM:\Software\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\$_" -Recurse -Force -EA SilentlyContinue
-    }
+    @('DevHomeUpdate','OutlookUpdate') | ForEach-Object { Remove-Item "HKLM:\Software\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\$_" -Recurse -Force -EA SilentlyContinue }
 }
+Log "=== Specialize Complete ==="
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\DefaultUser.ps1">
-# Configures default user profile registry hive for new account inheritance.
 $ErrorActionPreference = 'Continue'
+$log = 'C:\Windows\Setup\Scripts\DefaultUser.log'
+function Log($m) { "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') $m" | Add-Content $log -Force -EA SilentlyContinue }
+Log "=== DefaultUser Start ==="
 function Set-RegSafe {
     param([string]$Path, [string]$Name, $Value, [string]$Type = 'DWord')
     try {
@@ -281,10 +237,7 @@ Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" 'Ta
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\OOBE" 'PrivacyConsentStatus' 1
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer" 'DisableEdgeDesktopShortcutCreation' 1
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\RunOnce" 'UnattendedSetup' 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\UserOnce.ps1"' 'String'
-
-$hide = @('{5399e694-6ce5-4d6c-8fce-1d8870fdcba0}','{b4bfcc3a-db2c-424c-b029-7fe99a87c641}','{a8cdff1c-4878-43be-b5fd-f8091c1c60d0}',
-          '{374de290-123f-4565-9164-39c4925e467b}','{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}','{f874310e-b6b7-47dc-bc84-b9e6b38f5903}',
-          '{1cf1260c-4dd0-4ebb-811f-33c572699fde}','{f02c1a0d-be21-4350-88b0-7367fc96ef3c}','{3add1653-eb32-4cb0-bbd7-dfa0abb5acca}')
+$hide = @('{5399e694-6ce5-4d6c-8fce-1d8870fdcba0}','{b4bfcc3a-db2c-424c-b029-7fe99a87c641}','{a8cdff1c-4878-43be-b5fd-f8091c1c60d0}','{374de290-123f-4565-9164-39c4925e467b}','{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}','{f874310e-b6b7-47dc-bc84-b9e6b38f5903}','{1cf1260c-4dd0-4ebb-811f-33c572699fde}','{f02c1a0d-be21-4350-88b0-7367fc96ef3c}','{3add1653-eb32-4cb0-bbd7-dfa0abb5acca}')
 foreach ($clsid in $hide) {
     Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" $clsid 1
     Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" $clsid 1
@@ -293,11 +246,14 @@ Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIc
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu" '{20d04fe0-3aea-1069-a2d8-08002b30309d}' 0
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" '{645ff040-5081-101b-9f08-00aa002f954e}' 0
 Set-RegSafe "$p\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel" '{20d04fe0-3aea-1069-a2d8-08002b30309d}' 0
+Log "=== DefaultUser Complete ==="
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\UserOnce.ps1">
-# Applies per-user registry configurations and refreshes shell on first logon.
 $ErrorActionPreference = 'Continue'
+$log = "$env:TEMP\UserOnce.log"
+function Log($m) { "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') $m" | Add-Content $log -Force -EA SilentlyContinue }
+Log "=== UserOnce Start ==="
 Get-AppxPackage -Name 'Microsoft.Windows.Ai.Copilot.Provider' -EA SilentlyContinue | Remove-AppxPackage -EA SilentlyContinue
 function Set-RegSafe {
     param([string]$Path, [string]$Name, $Value, [string]$Type = 'DWord')
@@ -325,11 +281,14 @@ Set-RegSafe 'HKCU:\Control Panel\Accessibility\StickyKeys' 'Flags' '506' 'String
 Set-RegSafe 'HKCU:\Control Panel\Accessibility\ToggleKeys' 'Flags' '58' 'String'
 Set-RegSafe 'HKCU:\Control Panel\Accessibility\FilterKeys' 'Flags' '122' 'String'
 try { (New-Object -ComObject Shell.Application).RefreshMenu() } catch {}
+Log "=== UserOnce Complete ==="
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\FirstLogon.ps1">
-# Finalizes power configuration, optimizes background services, and deploys verification utility.
 $ErrorActionPreference = 'Continue'
+$log = 'C:\Windows\Setup\Scripts\FirstLogon.log'
+function Log($m) { "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') $m" | Add-Content $log -Force -EA SilentlyContinue }
+Log "=== FirstLogon Start ==="
 $os = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
 $isServer = $os.Caption -like '*Server*'
 powercfg.exe /hibernate off 2>&1 | Out-Null
@@ -338,7 +297,6 @@ if ($hp) { powercfg.exe /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>&1 | O
 powercfg.exe /change standby-timeout-ac 0 2>&1 | Out-Null
 powercfg.exe /change standby-timeout-dc 0 2>&1 | Out-Null
 powercfg.exe /change monitor-timeout-ac 0 2>&1 | Out-Null
-
 function Test-IsSSD {
     $pd = Get-PhysicalDisk -EA SilentlyContinue | Where-Object { $_.BusType -ne 'USB' } | Sort-Object Size -Descending | Select-Object -First 1
     if ($pd.MediaType -eq 'SSD' -or $pd.BusType -eq 'NVMe') { return $true }
@@ -349,7 +307,6 @@ function Test-IsSSD {
 if ((Test-IsSSD) -or $isServer) {
     try { Stop-Service SysMain -Force -EA SilentlyContinue; Set-Service SysMain -StartupType Disabled -EA SilentlyContinue } catch {}
 }
-
 $desktop = [Environment]::GetFolderPath('Desktop')
 $src = 'C:\Windows\Setup\Scripts\DeploymentVerification.ps1'
 $dest = Join-Path $desktop 'VerifyDeployment.lnk'
@@ -365,10 +322,10 @@ if (Test-Path $src) {
         $sc.Save()
     } catch {}
 }
+Log "=== FirstLogon Complete ==="
 		</File>
 
 		<File path="C:\Windows\Setup\Scripts\DeploymentVerification.ps1">
-# Verifies applied configuration settings and outputs a structured report.
 #requires -RunAsAdministrator
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
