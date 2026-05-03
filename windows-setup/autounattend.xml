@@ -68,10 +68,20 @@ Compatible with Windows 10/11 Pro, Home, LTSC, and Server 2019-2025.
 				<HideWirelessSetupInOOBE>false</HideWirelessSetupInOOBE>
 				<HideOnlineAccountScreens>true</HideOnlineAccountScreens>
 			</OOBE>
+			<UserAccounts>
+				<AdministratorPassword>
+					<Value></Value>
+					<PlainText>true</PlainText>
+				</AdministratorPassword>
+			</UserAccounts>
 			<AutoLogon>
 				<Enabled>true</Enabled>
 				<LogonCount>1</LogonCount>
 				<Username>Administrator</Username>
+				<Password>
+					<Value></Value>
+					<PlainText>true</PlainText>
+				</Password>
 			</AutoLogon>
 			<FirstLogonCommands>
 				<SynchronousCommand wcm:action="add">
@@ -157,13 +167,13 @@ $build = [Environment]::OSVersion.Version.Build
 function Set-RegSafe {
     param([string]$Path, [string]$Name, $Value, [string]$Type = 'DWord')
     try {
-        if (-not (Test-Path $Path)) { New-Item -Path (Split-Path $Path) -Force -EA SilentlyContinue | Out-Null }
+        if (-not (Test-Path $Path)) { New-Item -Path $Path -Force -EA SilentlyContinue | Out-Null }
         Set-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -Type $Type -Force -EA Stop
         Log "Set: $Path\$Name = $Value"
     } catch {
         $regType = switch ($Type) { 'DWord'{'REG_DWORD'} 'String'{'REG_SZ'} default{'REG_DWORD'} }
         $val = if ($Type -eq 'String') { "`"$Value`"" } else { $Value }
-        reg.exe add "`"$Path`"" /v "`"$Name`"" /t $regType /d $val /f 2>&1 | Out-Null
+        reg.exe add "`"$Path`"" /v "`"$Name`"" /t $regType /d $val /f 2&gt;&amp;1 | Out-Null
         Log "Fallback reg.exe: $Path\$Name"
     }
 }
@@ -187,7 +197,7 @@ Set-RegSafe 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense' 'AllowStora
 Set-RegSafe 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' 'SystemResponsiveness' 0
 Set-RegSafe 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' 'NetworkThrottlingIndex' 0xFFFFFFFF
 Set-RegSafe 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet' 'SubmitSamplesConsent' 2
-netsh.exe int tcp set global autotuning=normal 2>&1 | Out-Null
+netsh.exe int tcp set global autotuning=normal 2&gt;&amp;1 | Out-Null
 
 if (-not $isServer) {
     $pkgs = @('Microsoft.BingSearch*','Clipchamp.Clipchamp*','Microsoft.549981C3F5F10*','Microsoft.Windows.DevHome*','MicrosoftCorporationII.MicrosoftFamily*','Microsoft.WindowsFeedbackHub*','Microsoft.Getstarted*','Microsoft.MixedReality.Portal*','Microsoft.MicrosoftOfficeHub*','Microsoft.Office.OneNote*','Microsoft.OutlookForWindows*','Microsoft.MSPaint*','Microsoft.PowerAutomateDesktop*','MicrosoftCorporationII.QuickAssist*','Microsoft.SkypeApp*','Microsoft.MicrosoftSolitaireCollection*','MicrosoftTeams*','MSTeams*','Microsoft.Todos*','Microsoft.Wallet*','Microsoft.Xbox.TCUI*','Microsoft.XboxApp*','Microsoft.XboxGameOverlay*','Microsoft.XboxGamingOverlay*','Microsoft.XboxIdentityProvider*','Microsoft.XboxSpeechToTextOverlay*','Microsoft.GamingApp*','Microsoft.YourPhone*')
@@ -208,15 +218,16 @@ $ErrorActionPreference = 'Continue'
 $log = 'C:\Windows\Setup\Scripts\DefaultUser.log'
 function Log($m) { "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') $m" | Add-Content $log -Force -EA SilentlyContinue }
 Log "=== DefaultUser Start ==="
+New-PSDrive -Name HKU -PSProvider Registry -Root HKEY_USERS -EA SilentlyContinue | Out-Null
 function Set-RegSafe {
     param([string]$Path, [string]$Name, $Value, [string]$Type = 'DWord')
     try {
-        if (-not (Test-Path $Path)) { New-Item -Path (Split-Path $Path) -Force -EA SilentlyContinue | Out-Null }
+        if (-not (Test-Path $Path)) { New-Item -Path $Path -Force -EA SilentlyContinue | Out-Null }
         Set-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -Type $Type -Force -EA Stop
     } catch {
         $regType = switch ($Type) { 'DWord'{'REG_DWORD'} 'String'{'REG_SZ'} default{'REG_DWORD'} }
         $val = if ($Type -eq 'String') { "`"$Value`"" } else { $Value }
-        reg.exe add "`"$Path`"" /v "`"$Name`"" /t $regType /d $val /f 2>&1 | Out-Null
+        reg.exe add "`"$Path`"" /v "`"$Name`"" /t $regType /d $val /f 2&gt;&amp;1 | Out-Null
     }
 }
 $p = 'HKU:\DefaultUser'
@@ -258,7 +269,7 @@ Get-AppxPackage -Name 'Microsoft.Windows.Ai.Copilot.Provider' -EA SilentlyContin
 function Set-RegSafe {
     param([string]$Path, [string]$Name, $Value, [string]$Type = 'DWord')
     try {
-        if (-not (Test-Path $Path)) { New-Item -Path (Split-Path $Path) -Force -EA SilentlyContinue | Out-Null }
+        if (-not (Test-Path $Path)) { New-Item -Path $Path -Force -EA SilentlyContinue | Out-Null }
         Set-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -Type $Type -Force -EA Stop
     } catch {}
 }
@@ -291,12 +302,12 @@ function Log($m) { "$(Get-Date -f 'yyyy-MM-dd HH:mm:ss') $m" | Add-Content $log 
 Log "=== FirstLogon Start ==="
 $os = Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue
 $isServer = $os.Caption -like '*Server*'
-powercfg.exe /hibernate off 2>&1 | Out-Null
+powercfg.exe /hibernate off 2&gt;&amp;1 | Out-Null
 $hp = powercfg /l | Select-String 'High performance'
-if ($hp) { powercfg.exe /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2>&1 | Out-Null }
-powercfg.exe /change standby-timeout-ac 0 2>&1 | Out-Null
-powercfg.exe /change standby-timeout-dc 0 2>&1 | Out-Null
-powercfg.exe /change monitor-timeout-ac 0 2>&1 | Out-Null
+if ($hp) { powercfg.exe /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c 2&gt;&amp;1 | Out-Null }
+powercfg.exe /change standby-timeout-ac 0 2&gt;&amp;1 | Out-Null
+powercfg.exe /change standby-timeout-dc 0 2&gt;&amp;1 | Out-Null
+powercfg.exe /change monitor-timeout-ac 0 2&gt;&amp;1 | Out-Null
 function Test-IsSSD {
     $pd = Get-PhysicalDisk -EA SilentlyContinue | Where-Object { $_.BusType -ne 'USB' } | Sort-Object Size -Descending | Select-Object -First 1
     if ($pd.MediaType -eq 'SSD' -or $pd.BusType -eq 'NVMe') { return $true }
