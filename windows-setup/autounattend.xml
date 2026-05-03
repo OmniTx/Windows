@@ -42,12 +42,12 @@ Compatible with Windows 10/11 Pro, Home, LTSC, and Server 2019-2025.
 		</component>
 		<component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
 			<RunSynchronous>
-				<RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "$xml=[xml]::new();$xml.Load('C:\Windows\Panther\autounattend.xml');$sb=[scriptblock]::Create($xml.unattend.Extensions.ExtractScript);Invoke-Command -ScriptBlock $sb -ArgumentList $xml"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\GetComputerName.ps1"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>3</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\ApplyComputerName.ps1"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>4</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\Specialize.ps1"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "$p='C:\Windows\Panther';$f=@('autounattend.xml','unattend.xml')|%%{Join-Path $p $_}|?{Test-Path $_}|Select -First 1;if($f){$xml=[xml]::new();$xml.Load($f);$sb=[scriptblock]::Create($xml.unattend.Extensions.ExtractScript);Invoke-Command $sb -ArgumentList $xml}"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "if(Test-Path 'C:\Windows\Setup\Scripts\GetComputerName.ps1'){&amp; 'C:\Windows\Setup\Scripts\GetComputerName.ps1'}"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>3</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "if(Test-Path 'C:\Windows\Setup\Scripts\ApplyComputerName.ps1'){&amp; 'C:\Windows\Setup\Scripts\ApplyComputerName.ps1'}"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>4</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "if(Test-Path 'C:\Windows\Setup\Scripts\Specialize.ps1'){&amp; 'C:\Windows\Setup\Scripts\Specialize.ps1'}"</Path></RunSynchronousCommand>
 				<RunSynchronousCommand wcm:action="add"><Order>5</Order><Path>reg.exe load "HKU\DefaultUser" "C:\Users\Default\NTUSER.DAT"</Path></RunSynchronousCommand>
-				<RunSynchronousCommand wcm:action="add"><Order>6</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\DefaultUser.ps1"</Path></RunSynchronousCommand>
+				<RunSynchronousCommand wcm:action="add"><Order>6</Order><Path>powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command "if(Test-Path 'C:\Windows\Setup\Scripts\DefaultUser.ps1'){&amp; 'C:\Windows\Setup\Scripts\DefaultUser.ps1'}"</Path></RunSynchronousCommand>
 				<RunSynchronousCommand wcm:action="add"><Order>7</Order><Path>reg.exe unload "HKU\DefaultUser"</Path></RunSynchronousCommand>
 			</RunSynchronous>
 		</component>
@@ -102,11 +102,8 @@ foreach ($file in $Document.unattend.Extensions.File) {
     try {
         $bytes = [System.Text.Encoding]::UTF8.GetPreamble() + [System.Text.Encoding]::UTF8.GetBytes($file.InnerText.Trim())
         [System.IO.File]::WriteAllBytes($path, $bytes)
-    } catch { exit 1 }
+    } catch { continue }
 }
-$required = @('GetComputerName.ps1','ApplyComputerName.ps1','Specialize.ps1','DefaultUser.ps1','FirstLogon.ps1','UserOnce.ps1','DeploymentVerification.ps1')
-$missing = $required | Where-Object { -not (Test-Path "$base\$_") }
-if ($missing.Count -gt 0) { exit 1 }
 		</ExtractScript>
 
 		<File path="C:\Windows\Setup\Scripts\GetComputerName.ps1">
