@@ -21,7 +21,6 @@ Compatible with Windows 10/11 Pro, Home, LTSC, and Server 2019-2025.
 		</component>
 		<component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
 			<UserData>
-				<ProductKey><WillShowUI>Never</WillShowUI></ProductKey>
 				<AcceptEula>true</AcceptEula>
 			</UserData>
 			<UseConfigurationSet>false</UseConfigurationSet>
