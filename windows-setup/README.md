@@ -1,6 +1,6 @@
 # Windows Deployment Configuration Suite
 
-A collection of scripts and configuration files for applying privacy-focused, performance-optimized settings to Windows 10/11 installations. Compatible with Pro, Home, LTSC, and Server 2019-2025 editions.
+A hardened, privacy-focused, performance-optimized `autounattend.xml` for Windows 10/11 installations. Compatible with Pro, Home, LTSC, and Server 2019–2025 editions.
 
 ---
 
@@ -9,199 +9,240 @@ A collection of scripts and configuration files for applying privacy-focused, pe
 | File | Purpose | When to Use |
 |------|---------|-------------|
 | `autounattend.xml` | Unattended deployment configuration | Fresh Windows installation via USB/ISO |
-| `ApplyConfigurations.ps1` | Post-install configuration script | Existing Windows installation |
-| `DeploymentVerification.ps1` | PowerShell verification utility | Check applied settings (Admin required) |
-| `VerifyDeployment.cmd` | CMD verification utility | Quick check without PowerShell execution policy concerns |
 
 ---
 
 ## ⚙️ System Requirements
 
-- **Operating System**: Windows 10/11 Pro, Home, Enterprise, LTSC, or Server 2019-2025
+- **Operating System**: Windows 10/11 Pro, Home, Enterprise, LTSC, or Server 2019–2025
 - **Architecture**: x64 (AMD64)
-- **Privileges**: Administrator rights required for all scripts
-- **PowerShell**: Version 5.1 or later (included with Windows 10/11)
-- **Disk Space**: ~50 MB temporary space for logs and extraction
+- **PowerShell**: 5.1+ (ships with Windows 10/11)
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Usage
 
-### Option A: Fresh Installation (Recommended)
-
-1. Copy `autounattend.xml` to the **root** of your Windows installation USB or ISO
-2. Boot target machine from installation media
-3. Windows Setup will automatically detect and apply all configurations
-4. After first login, verify settings using `DeploymentVerification.ps1` on the desktop
-
-### Option B: Existing Installation
-
-1. Open PowerShell as Administrator
-2. Navigate to the script location
-3. Execute:
-   ```powershell
-   .\ApplyConfigurations.ps1
-   ```
-4. Wait for completion message
-5. Restart Explorer or log out/in for UI changes to apply:
-   ```powershell
-   taskkill /f /im explorer.exe && start explorer.exe
-   ```
-
-### Option C: Verify Applied Settings
-
-Run either verification script as Administrator:
-
-```powershell
-# PowerShell version (detailed output)
-.\DeploymentVerification.ps1
-
-# CMD version (simplified output)
-.\VerifyDeployment.cmd
-```
+1. Copy `autounattend.xml` to the **root** of your Windows installation USB
+2. Boot from the USB
+3. Windows Setup auto-detects the file and applies everything
+4. After first login, run `VerifyDeployment.lnk` on the desktop to confirm
 
 ---
 
-## 🔧 What Gets Configured
+## 🆚 What's Extra vs a Normal Unattend File
 
-### System-Wide Settings (HKLM)
-- Bypass TPM 2.0, Secure Boot, RAM, and CPU requirements for installation
-- Disable Windows Copilot and AI data analysis features
-- Set telemetry to minimum (Security/0)
-- Enable Win32 long paths (remove 260-character limit)
-- Disable Fast Startup for dual-boot compatibility
-- Remove consumer features and promotional content
-- Optimize CPU priority for background services
-- Disable Windows Error Reporting and Defender sample submission
-- Hide 3D Objects folder from File Explorer
-- Configure network throttling and TCP autotuning for performance
+A standard/minimal `autounattend.xml` only does: locale, EULA accept, partition, and maybe a product key. This file goes **far beyond** that with 7 embedded PowerShell scripts and extensive hardening.
 
-### User Settings (HKCU)
-- Show hidden files and file extensions in Explorer
-- Launch Explorer to "This PC" instead of Quick Access
-- Display full path in Explorer title bar
-- Disable Bing search integration in Start menu
-- Hide Task View, Widgets, and Chat buttons from taskbar
-- Disable advertising ID and tailored experiences
-- Configure accessibility keys (disable Sticky/Filter/Toggle prompts)
+### Standard Unattend Features (present in any basic file)
 
-### Services & Power
-- Conditionally disable SysMain (Superfetch) on SSD/Server systems
-- Disable hibernation to free disk space
-- Set power plan to High Performance
-- Disable sleep and monitor timeout timers
-
-### Application Management
-- Remove provisioned bloatware packages (Xbox, Teams, Bing, etc.)
-- Block automatic installation of DevHome and Outlook OOBE stubs
-- Skip application removal on Server editions
+| Feature | Details |
+|---------|---------|
+| Locale / Language | `en-US`, keyboard layout `0409` |
+| Accept EULA | `AcceptEula=true` |
+| Skip product key UI | `WillShowUI=Never` |
+| Computer name | `*` (random, then overridden by scripts) |
+| Timezone | `UTC` |
+| OOBE skip | Hides EULA page, online account screens |
+| AutoLogon | One-time login as Administrator (no password — set manually post-setup) |
 
 ---
 
-## 🧪 Verification
+### 🛡️ EXTRA: Hardware Requirement Bypasses (windowsPE pass)
 
-After applying configurations, run `DeploymentVerification.ps1` to confirm settings:
+Not present in a normal unattend file. Bypasses all Windows 11 hardware checks:
 
-```
-✅ Passed  : 28
-❌ Failed  : 0
-⚠️  Missing : 2
-```
+| Bypass | Registry Key |
+|--------|-------------|
+| TPM 2.0 | `BypassTPMCheck = 1` |
+| Secure Boot | `BypassSecureBootCheck = 1` |
+| RAM | `BypassRAMCheck = 1` |
+| Storage | `BypassStorageCheck = 1` |
+| CPU | `BypassCPUCheck = 1` |
+| BitLocker auto-encryption | `PreventDeviceEncryption = 1` |
 
-**Interpretation**:
-- ✅ **PASS**: Setting matches expected value
-- ❌ **FAIL**: Setting exists but has incorrect value
-- ⚠️ **MISS**: Setting not found (may be edition-specific or not applicable)
+> Allows installing Windows 11 on unsupported hardware (old CPUs, no TPM, etc.)
 
-**Note**: HKCU checks reflect the current user profile. If run as Administrator, per-user settings may not appear until a standard user logs in.
+---
+
+### 🛡️ EXTRA: UAC Kept Enabled (offlineServicing pass)
+
+| Setting | Value |
+|---------|-------|
+| `EnableLUA` | `true` |
+
+> Many "debloat" scripts disable UAC. This file **keeps it enabled** for security while disabling the annoying stuff separately.
+
+---
+
+### 🔧 EXTRA: Embedded Script System (Extensions)
+
+Uses the [schneegans.de unattend-generator](https://schneegans.de/windows/unattend-generator/) `<Extensions>` pattern to embed **7 PowerShell scripts** directly inside the XML. During the specialize pass, an `ExtractScript` extracts them all to `C:\Windows\Setup\Scripts\`.
+
+**This is the biggest difference from a normal unattend file — normal files can't carry scripts.**
+
+| Script | Phase | What It Does |
+|--------|-------|-------------|
+| `GetComputerName.ps1` | Specialize | Generates a random hardware-based computer name (e.g. `DEVICE-A87N456`) |
+| `ApplyComputerName.ps1` | Specialize | Applies the generated name via `Rename-Computer` with registry fallback |
+| `Specialize.ps1` | Specialize | Main hardening — 20+ registry tweaks + bloatware removal |
+| `DefaultUser.ps1` | Specialize | Configures the Default User profile (applies to all future users) |
+| `UserOnce.ps1` | First User Login | Per-user tweaks via RunOnce (Bing search, ads, accessibility, etc.) |
+| `FirstLogon.ps1` | First Logon | Power plan, hibernation, SysMain, verification shortcut |
+| `DeploymentVerification.ps1` | Manual | Run anytime to check all settings — outputs PASS/FAIL report |
+
+---
+
+### 🔒 EXTRA: Privacy Hardening (Specialize.ps1)
+
+None of these are in a normal unattend file:
+
+| Setting | Registry Path | Value | What It Does |
+|---------|--------------|-------|-------------|
+| Disable Copilot | `WindowsCopilot\TurnOffWindowsCopilot` | `1` | Removes Windows Copilot |
+| Disable AI data analysis | `WindowsAI\DisableAIDataAnalysis` | `1` | Blocks Recall/AI features |
+| Telemetry off | `DataCollection\AllowTelemetry` | `0` | Minimum telemetry (Security only) |
+| Disable activity feed | `System\EnableActivityFeed` | `0` | No activity history |
+| Disable activity publishing | `System\PublishUserActivities` | `0` | No cloud activity sync |
+| Disable consumer features | `CloudContent\DisableWindowsConsumerFeatures` | `1` | No suggested apps/ads |
+| Disable Teams chat auto-install | `Communications\ConfigureChatAutoInstall` | `0` | No Teams popup |
+| Disable mDNS | `DNSClient\EnableMulticast` | `0` | Privacy — no multicast DNS |
+| Disable Windows Error Reporting | `Windows Error Reporting\Disabled` | `1` | No crash reports sent |
+| Defender samples: send safe only | `Spynet\SubmitSamplesConsent` | `2` | Only send safe samples |
+
+---
+
+### ⚡ EXTRA: Performance Tuning (Specialize.ps1 + FirstLogon.ps1)
+
+| Setting | Value | What It Does |
+|---------|-------|-------------|
+| `Win32PrioritySeparation` | `0x26` | Foreground apps get more CPU priority |
+| `NetworkThrottlingIndex` | `0xFFFFFFFF` | Removes network throttling limit |
+| `SystemResponsiveness` | `0` | All CPU available for foreground tasks |
+| `HiberbootEnabled` | `0` | Disables Fast Startup (fixes dual-boot + SSD issues) |
+| `LongPathsEnabled` | `1` | Removes 260-char path limit |
+| TCP autotuning | `normal` | Ensures TCP window scaling is on |
+| Game Bar disabled | `ActivationType = 0` | Stops background Game Bar processes |
+| SysMain (Superfetch) | Disabled on SSD | Not needed on SSDs, wastes writes |
+| Hibernation | Off | Frees disk space (= RAM size) |
+| Power plan | High Performance | Max CPU, no sleep/standby |
+| Monitor timeout | 0 (never) | Screen stays on |
+
+---
+
+### 🧹 EXTRA: Bloatware Removal (Specialize.ps1)
+
+Removes 28 provisioned AppX packages (skipped on Server editions):
+
+| Removed Apps |
+|-------------|
+| Bing Search, Clipchamp, Cortana, Dev Home |
+| Microsoft Family, Feedback Hub, Get Started (Tips) |
+| Mixed Reality Portal, Office Hub, OneNote |
+| Outlook (new), Paint (new), Power Automate Desktop |
+| Quick Assist, Skype, Solitaire Collection |
+| Teams (both old & new), To Do, Wallet |
+| Xbox (TCUI, App, GameOverlay, GamingOverlay, Identity, SpeechToText) |
+| Gaming App, Your Phone / Phone Link |
+| Copilot Provider (Win 11 only, non-LTSC) |
+
+Also blocks OOBE auto-install stubs:
+- `DevHomeUpdate`
+- `OutlookUpdate`
+
+---
+
+### 👤 EXTRA: Default User Profile Tweaks (DefaultUser.ps1)
+
+Applied to the Default User hive — every new user gets these settings automatically:
+
+| Setting | Value | What It Does |
+|---------|-------|-------------|
+| Copilot off | `TurnOffWindowsCopilot = 1` | Per-user Copilot disable |
+| OneDrive auto-run | Removed from Run key | No OneDrive popup |
+| Game DVR | `AppCaptureEnabled = 0` | No background game recording |
+| NumLock on | `InitialKeyboardIndicators = 2` | NumLock on at login |
+| End Task in taskbar | `TaskbarEndTask = 1` | Right-click → End Task |
+| Show hidden files | `Hidden = 1` | Hidden files visible |
+| Show file extensions | `HideFileExt = 0` | `.exe`, `.txt` visible |
+| Checkboxes in Explorer | `AutoCheckSelect = 1` | Item selection checkboxes |
+| Open to This PC | `LaunchTo = 1` | Explorer opens to This PC |
+| Full path in title | `FullPath = 1` | Full path in Explorer title bar |
+| Search box style | `SearchboxTaskbarMode = 3` | Search icon mode |
+| Hide Task View | `ShowTaskViewButton = 0` | Remove Task View from taskbar |
+| Hide Widgets | `TaskbarDa = 0` | Remove Widgets from taskbar |
+| Hide Chat | `TaskbarMn = 0` | Remove Chat from taskbar |
+| Privacy consent | `PrivacyConsentStatus = 1` | Skip privacy consent |
+| No Edge shortcut | `DisableEdgeDesktopShortcutCreation = 1` | No Edge shortcut on desktop |
+| Desktop icons | Only Recycle Bin + This PC shown | Hides all other desktop icons |
+
+---
+
+### 👤 EXTRA: Per-User RunOnce Tweaks (UserOnce.ps1)
+
+Runs once per user on first login (via RunOnce registry key):
+
+| Setting | What It Does |
+|---------|-------------|
+| Remove Copilot AppX | Uninstalls Copilot for the user |
+| Disable Bing in Search | `BingSearchEnabled = 0` |
+| Disable Cortana consent | `CortanaConsent = 0` |
+| Disable advertising ID | `Enabled = 0` |
+| Disable tailored experiences | `TailoredExperiencesWithDiagnosticDataEnabled = 0` |
+| Disable Game DVR | `GameDVR_Enabled = 0` |
+| Disable Sticky Keys prompt | `Flags = 506` |
+| Disable Toggle Keys prompt | `Flags = 58` |
+| Disable Filter Keys prompt | `Flags = 122` |
+| Disable News Feed | `ShellFeedsTaskbarViewMode = 2` |
+
+---
+
+### ✅ EXTRA: Deployment Verification (DeploymentVerification.ps1)
+
+A post-install auditing tool (no normal unattend has this). Run from the desktop shortcut to get a PASS/FAIL report checking 16 settings:
+
+- All HKLM hardening keys
+- HKCU user settings
+- SysMain service state
+- Hibernation state
+- TCP autotuning level
+
+Output saved to `Desktop\VerificationResult.txt`.
+
+---
+
+## 🔒 Security Notes
+
+- **AutoLogon** uses `LogonCount=1` — expires immediately after first login scripts run
+- **Administrator password** is blank during setup — set it manually post-install
+- **BitLocker** is disabled — re-enable if needed
+- **UAC** stays enabled (unlike most debloat scripts)
+
+---
+
+## 📁 File Locations After Install
+
+| Item | Path |
+|------|------|
+| Extracted scripts | `C:\Windows\Setup\Scripts\` |
+| Specialize log | `C:\Windows\Setup\Scripts\Specialize.log` |
+| DefaultUser log | `C:\Windows\Setup\Scripts\DefaultUser.log` |
+| FirstLogon log | `C:\Windows\Setup\Scripts\FirstLogon.log` |
+| UserOnce log | `%TEMP%\UserOnce.log` |
+| Verification report | `%USERPROFILE%\Desktop\VerificationResult.txt` |
+| Verification shortcut | `%USERPROFILE%\Desktop\VerifyDeployment.lnk` |
 
 ---
 
 ## 🛠️ Troubleshooting
 
-### Script won't run: Execution policy error
-```powershell
-# Allow script execution for current user only
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-### Verification shows many "MISS" results
-- Ensure script is run **as Administrator** (required for HKLM access)
-- HKCU settings apply on first standard-user login; re-run verification after logging in as a normal user
-- Some settings are edition-specific (e.g., AppX removal skipped on Server)
-
-### Registry changes not applying
-- Close any open Registry Editor instances before running scripts
-- Some keys require a reboot to take effect
-- Check `%TEMP%\ApplyConfig_*.log` for detailed execution logs
-
-### AppX removal fails or hangs
-- Ensure internet connectivity is available (for package metadata)
-- Some packages may be in use; retry after reboot
-- Server editions skip AppX operations by design
-
-### Computer name shows as "DESKTOP-XXXXX"
-- The hostname is set during the `specialize` pass; if Windows Setup cached a random name first, the override may not apply
-- Manually rename via System Properties or run:
-  ```powershell
-  Rename-Computer -NewName "DEVICE-XXX" -Force; Restart-Computer
-  ```
+| Problem | Fix |
+|---------|-----|
+| Setup crashes during install | Validate XML: `[xml](Get-Content autounattend.xml -Raw)` — check for unescaped `&` or `<` in embedded scripts |
+| Settings not applied | Check logs in `C:\Windows\Setup\Scripts\*.log` |
+| Verification shows FAIL | Some settings are edition-specific; HKCU checks need standard user login |
+| Computer name is DESKTOP-XXXX | The name script may have failed; rename manually via System Properties |
 
 ---
 
-## 🔒 Security Considerations
-
-- **AutoLogon**: The unattended file uses `LogonCount=1` for the built-in Administrator account. Ensure physical security during deployment.
-- **BitLocker**: Device encryption is disabled by default. Re-enable post-deployment if required by policy.
-- **Telemetry**: Set to minimum (0). Some enterprise management tools may require higher levels; adjust `AllowTelemetry` value if needed.
-- **Script Signing**: Scripts are unsigned. For enterprise deployment, sign with a trusted certificate or use AppLocker/WDAC to allow execution.
-
----
-
-## 📁 File Locations
-
-| Item | Path |
-|------|------|
-| Deployment scripts | `C:\Windows\Setup\Scripts\` |
-| Execution logs | `%TEMP%\ApplyConfig_*.log`, `%TEMP%\Specialize_Transcript.log` |
-| Verification report | `%USERPROFILE%\Desktop\VerificationResult.txt` |
-| Completion marker | `C:\Windows\Setup\Scripts\SETUP_COMPLETE.txt` |
-
----
-
-## 🔄 Updating Configurations
-
-To modify settings:
-
-1. Edit the relevant section in `autounattend.xml` or `ApplyConfigurations.ps1`
-2. Test changes in a virtual machine before production deployment
-3. Update `DeploymentVerification.ps1` to check new settings
-4. Document changes in this README for team reference
-
-**Recommended testing workflow**:
-```powershell
-# 1. Create VM snapshot
-# 2. Apply configuration
-# 3. Run verification
-# 4. Test critical applications
-# 5. Revert snapshot if issues found
-```
-
----
-
-## 📄 License
-
-This configuration suite is provided as-is for educational and administrative use. No warranty is expressed or implied. Users are responsible for testing configurations in a non-production environment before deployment.
-
----
-
-## 📞 Support & Contributions
-
-- Review logs in `%TEMP%` for troubleshooting
-- Verify XML syntax with: `xmllint --noout autounattend.xml` (Linux) or PowerShell `[xml]::new().Load("autounattend.xml")`
-- For enterprise deployment questions, consult Microsoft documentation on Windows Answer Files and Configuration Designer
-
----
-
-*Last updated: May 2026*  
-*Compatible with Windows 10/11 builds 19041-26100+*
+*Last updated: May 2026*
+*Compatible with Windows 10/11 builds 19041–26100+*
