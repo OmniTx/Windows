@@ -21,6 +21,15 @@ Compatible with Windows 10/11 Pro, Home, LTSC, and Server 2019-2025.
 		</component>
 		<component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
 			<UserData>
+				<!-- PRODUCT KEY: Remove or change for your edition
+				     IoT Enterprise LTSC 2021: QPM6N-7J2WJ-P88HH-P3YRH-YY74H
+				     Enterprise LTSC 2019/2021: M7XTQ-FN8P6-TTKYV-9D4CC-J462D
+				     Win 11 Pro:               VK7JG-NPHTM-C97JM-9MPGT-3V66T
+				     Remove entire <ProductKey> block to enter key manually -->
+				<ProductKey>
+					<Key>QPM6N-7J2WJ-P88HH-P3YRH-YY74H</Key>
+					<WillShowUI>OnError</WillShowUI>
+				</ProductKey>
 				<AcceptEula>true</AcceptEula>
 			</UserData>
 			<UseConfigurationSet>false</UseConfigurationSet>
